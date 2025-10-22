@@ -79,62 +79,52 @@ void salvar_pgm(const char* nome_arquivo, int matriz[89][89]) {
     fclose(f);
 }
 
-void filtro_gaussiano(int x, int y) {
-    //largura e altura tem que ser x e y ou nenhum parâmetro deve ser passado e usamos as variaveis globais
-    int i, j;
-    int kernel[5][5] = {
-        {2, 4, 5, 4, 2},
-        {4, 9, 12, 9, 4},
-        {5, 12, 15, 12, 5},
-        {4, 9, 12, 9, 4},
-        {2, 4, 5, 4, 2}
-    };
+void filtro_gaussiano() {
+    int temp[89][89]; // buffer temporário
+    int kernel[5][5] = {{2,4,5,4,2}, {4,9,12,9,4}, {5,12,15,12,5}, {4,9,12,9,4}, {2,4,5,4,2}};
     int sum = 159;
 
-    for(i = 0; i < x; i++){
-        for(j = 0; j < y; j++){
+    for(int i = 2; i < altura - 2; i++) {
+        for(int j = 2; j < largura - 2; j++) {
             int val = 0;
             for (int ky = -2; ky <= 2; ky++) {
                 for (int kx = -2; kx <= 2; kx++) {
-                    val += img[y + ky][x + kx] * kernel[ky + 2][kx + 2];
+                    val += img[i + ky][j + kx] * kernel[ky + 2][kx + 2];
                 }
             }
-            img[y][x] = val / sum;
+            temp[i][j] = val / sum;
+        }
+    }
+    // Copia resultado de volta
+    for(int i = 0; i < altura; i++) {
+        for(int j = 0; j < largura; j++) {
+            img[i][j] = temp[i][j];
         }
     }
 }
 
 void calc_gradiente() {
-    int direcao, magnitude, i, j;
-    int sobelGx[3][3] = {
-        {-1, 0, 1},
-        {-2, 0, 2},
-        {-1, 0, 1},
-    };
-    int sobelGy[3][3] = {
-        {1, 2, 1},
-        {0, 0, 0},
-        {-1, -2, -1},
-    };
+    int direcao;
+    int temp_mag[89][89];
+    int sobelGx[3][3] = {{-1,0,1}, {-2,0,2}, {-1,0,1}};
+    int sobelGy[3][3] = {{-1,-2,-1}, {0,0,0}, {1,2,1}};
 
-    for(int i = 1; i < 89 - 1; i++) {
-        for(int j = 1; j < 89 - 1; j++) {
-            int soma_eixo_x = 0;
-            int soma_eixo_y = 0;
-
+    for(int i = 1; i < 88; i++) {
+        for(int j = 1; j < 88; j++) {
+            int soma_x = 0, soma_y = 0;
+            
             for(int ki = -1; ki <= 1; ki++) {
                 for(int kj = -1; kj <= 1; kj++) {
                     int pixel = img[i + ki][j + kj];
-                    soma_eixo_x += pixel * sobelGx[ki + 1][kj + 1];
-                    soma_eixo_y += pixel * sobelGy[ki + 1][kj + 1];
+                    soma_x += pixel * sobelGx[ki + 1][kj + 1];
+                    soma_y += pixel * sobelGy[ki + 1][kj + 1];
                 }
             }
-
-            magnitude = (int)sqrt(soma_eixo_x * soma_eixo_x + soma_eixo_y * soma_eixo_y);
-            img[i][j] = magnitude;
+            
+            temp_mag[i][j] = (int)sqrt(soma_x * soma_x + soma_y * soma_y);
 
             //direção do gradiente (em graus)
-            float angulo = atan2(soma_eixo_y, soma_eixo_x) * 180/PI;
+            float angulo = atan2(soma_y, soma_x) * 180/PI;
             if (angulo < 0) angulo += 180;
 
             if (angulo<22.5 || angulo>=157.5)
@@ -152,6 +142,14 @@ void calc_gradiente() {
             else direcao = 135;
 
             dir[i][j] = direcao;
+
+
+        }
+    }
+
+    for(int i = 0; i < 89; i++) {
+        for(int j = 0; j < 89; j++) {
+            img[i][j] = temp_mag[i][j];
         }
     }
 }
@@ -198,7 +196,7 @@ void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
     unsigned char fraco =  75;
 
     for (int i = 0; i < altura; i++){
-        for (int j = 0; j < altura; j++){
+        for (int j = 0; j < largura; j++){
 
             if (bordas[i][j] >= limiar_alto)
                 bordas[i][j] = forte;
@@ -246,10 +244,10 @@ void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
 int main() {
 
     printf("Lendo imagem...\n");
-    ler_pgm("./exemplo.pgm");
+    ler_pgm("./teste.pgm");
 
     printf("Aplicando filtro gaussiano...\n");
-    filtro_gaussiano(largura, altura);
+    filtro_gaussiano();
 
     printf("Calculando gradientes...\n");
     calc_gradiente();
