@@ -17,6 +17,8 @@
 #define PI 3.14159265
 
 int img[89][89];
+int dir[89][89];
+int bordas[89][89];
 int largura, altura;
 //se declara-las dentro da função de ler pgm, o valor delas vai ser perdido depois que a função terminar de executar
 
@@ -148,11 +150,48 @@ void calc_gradiente() {
                 direcao = 90;
             }
             else direcao = 135;
+
+            dir[i][j] = direcao;
         }
     }
 }
 
-void supr_nao_max() {}
+void supr_nao_max() {
+    for (int i = 1; i < altura; i++){
+        for (int j = 1; j < largura; i++){
+            int mag = img[i][j];
+            int direcao = dir[i][j];
+            int n1, n2;
+
+            switch (direcao)
+            {
+            case 0:
+                n1 = img[i][j-1];
+                n2 = img[i][j+1];
+                break;
+            case 45:
+                n1 = img[i-1][j+1];
+                n2 = img[i+1][j-1];
+                break;
+            case 90:
+                n1 = img[i-1][j];
+                n2 = img[i+1][j];
+                break;
+            case 135:
+                n1 = img[i-1][j-1];
+                n2 = img[i+1][j+1];
+                break;
+            default:
+                n1 = n2 = 0;
+            }
+
+            if(mag >= n1 && mag >=  n2)
+            bordas[i][j] = mag > 255 ? 255 : mag;
+            else
+            bordas[i][j] = 0;
+        }
+    }
+}
 
 void limiarizacao_histerese() {}
 
@@ -160,4 +199,6 @@ int main() {
 
     ler_pgm("./exemplo.pgm");
     calc_gradiente();
+    supr_nao_max();
+    limiarizacao_histerese();
 }
