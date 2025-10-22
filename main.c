@@ -15,6 +15,8 @@
 #include <string.h>
 
 int img[89][89];
+int largura, altura;
+//se declara-las dentro da função de ler pgm, o valor delas vai ser perdido depois que a função terminar de executar
 
 void ler_pgm(const char* filename) {
     FILE* f = fopen(filename, "r");
@@ -23,7 +25,8 @@ void ler_pgm(const char* filename) {
         return;
     }
     char tipo[3];
-    int largura, altura, maxval;
+    //int largura, altura, maxval;
+    int maxval;
     fscanf(f, "%2s", tipo);
     if (tipo[0] != 'P' || tipo[1] != '2') {
         printf("Arquivo não é PGM tipo P2 (ASCII)\n");
@@ -72,7 +75,8 @@ void salvar_pgm(const char* nome_arquivo, int matriz[89][89]) {
     fclose(f);
 }
 
-void filtro_gaussiano(int largura, int altura) {
+void filtro_gaussiano(int x, int y) {
+    //largura e altura tem que ser x e y ou nenhum parâmetro deve ser passado e usamos as variaveis globais
     int i, j;
     int kernel[5][5] = {
         {2, 4, 5, 4, 2},
@@ -83,8 +87,8 @@ void filtro_gaussiano(int largura, int altura) {
     };
     int sum = 159;
 
-    for(i = 0; i < altura; i++){
-        for(j = 0; j < largura; j++){
+    for(i = 0; i < x; i++){
+        for(j = 0; j < y; j++){
             int val = 0;
             for (int ky = -2; ky <= 2; ky++) {
                 for (int kx = -2; kx <= 2; kx++) {
