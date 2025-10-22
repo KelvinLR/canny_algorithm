@@ -14,6 +14,8 @@
 #include <math.h>
 #include <string.h>
 
+#define PI 3.14159265
+
 int img[89][89];
 int largura, altura;
 //se declara-las dentro da função de ler pgm, o valor delas vai ser perdido depois que a função terminar de executar
@@ -101,7 +103,7 @@ void filtro_gaussiano(int x, int y) {
 }
 
 void calc_gradiente() {
-    int magnitude, i, j;
+    int direcao, magnitude, i, j;
     int sobelGx[3][3] = {
         {-1, 0, 1},
         {-2, 0, 2},
@@ -128,6 +130,24 @@ void calc_gradiente() {
 
             magnitude = (int)sqrt(soma_eixo_x * soma_eixo_x + soma_eixo_y * soma_eixo_y);
             img[i][j] = magnitude;
+
+            //direção do gradiente (em graus)
+            float angulo = atan2(soma_eixo_y, soma_eixo_x) * 180/PI;
+            if (angulo < 0) angulo += 180;
+
+            if (angulo<22.5 || angulo>=157.5)
+            {
+                direcao = 0;
+            }
+            else if (angulo<67.5)
+            {
+                direcao = 45;
+            }
+            else if (angulo < 112.5)
+            {
+                direcao = 90;
+            }
+            else direcao = 135;
         }
     }
 }
