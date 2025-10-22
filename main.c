@@ -158,7 +158,7 @@ void calc_gradiente() {
 
 void supr_nao_max() {
     for (int i = 1; i < altura; i++){
-        for (int j = 1; j < largura; i++){
+        for (int j = 1; j < largura; j++){
             int mag = img[i][j];
             int direcao = dir[i][j];
             int n1, n2;
@@ -193,12 +193,73 @@ void supr_nao_max() {
     }
 }
 
-void limiarizacao_histerese() {}
+void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
+    unsigned char forte = 255;
+    unsigned char fraco =  75;
+
+    for (int i = 0; i < altura; i++){
+        for (int j = 0; j < altura; j++){
+
+            if (bordas[i][j] >= limiar_alto)
+                bordas[i][j] = forte;
+            else if (bordas[i][j] >= limiar_baixo)
+                bordas[i][j] = fraco;
+            else
+                bordas[i][j] = 0;
+            
+        }
+    }
+
+    int mudou = 1;
+    while (mudou){
+        mudou = 0;
+        for (int i = 1; i < altura -1; i++){
+            for (int j = 1; j < largura-1; j++){
+                if (bordas[i][j] == fraco){
+                    int tem_forte = 0;
+                    for (int di = -1; di <= 1; di++){
+                        for (int dj = -1; dj <= 1; dj++){
+                            if(bordas[i + di][j + dj] == forte) {
+                                tem_forte = 1;
+                                break;
+                            }
+                        }
+                        if(tem_forte) break;
+                    }
+                    if(tem_forte) {
+                        bordas[i][j] = forte;
+                        mudou = 1;
+                    }
+                }
+            }
+        }
+    }
+    
+    for (int i = 0; i < altura; i++){
+        for (int j = 0; j < largura; j++){
+            if(bordas[i][j] == fraco)
+                bordas[i][j] = 0;
+        }
+    }
+}
 
 int main() {
 
+    printf("Lendo imagem...\n");
     ler_pgm("./exemplo.pgm");
+
+    printf("Aplicando filtro gaussiano...\n");
+    filtro_gaussiano(largura, altura);
+
+    printf("Calculando gradientes...\n");
     calc_gradiente();
+
+    printf("Supressão não-máxima...\n");
     supr_nao_max();
-    limiarizacao_histerese();
+
+    printf("Realizando limiarização com estereses 30 e 75...\n");
+    limiarizacao_histerese(30, 75);
+
+    printf("Sobrescrevendo e salvando imagem...\n");
+    salvar_pgm("output.pgm", bordas);
 }
