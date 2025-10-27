@@ -15,10 +15,12 @@
 #include <string.h>
 
 #define PI 3.14159265
+#define KERNEL_SIZE 5
+#define K 2
 
-int img[89][89];
-int dir[89][89];
-int bordas[89][89];
+int img[89][89] = {0};
+int dir[89][89] = {0};
+int bordas[89][89] = {0};
 int largura, altura;
 //se declara-las dentro da função de ler pgm, o valor delas vai ser perdido depois que a função terminar de executar
 
@@ -81,31 +83,59 @@ void salvar_pgm(const char* nome_arquivo, int matriz[89][89]) {
 
 void filtro_gaussiano() {
     int temp[89][89]; // buffer temporário
-    int kernel[5][5] = {{2,4,5,4,2}, {4,9,12,9,4}, {5,12,15,12,5}, {4,9,12,9,4}, {2,4,5,4,2}};
-    int sum = 159;
+    float kernel[5][5] = {
+            {2/159.0f, 4/159.0f, 5/159.0f, 4/159.0f, 2/159.0f},
+            {4/159.0f, 9/159.0f, 12/159.0f, 9/159.0f, 4/159.0f},
+            {5/159.0f, 12/159.0f, 15/159.0f, 12/159.0f, 5/159.0f},
+            {4/159.0f, 9/159.0f, 12/159.0f, 9/159.0f, 4/159.0f},
+            {2/159.0f, 4/159.0f, 5/159.0f, 4/159.0f, 2/159.0f}
+        };
 
-    for(int i = 2; i < altura - 2; i++) {
-        for(int j = 2; j < largura - 2; j++) {
-            int val = 0;
-            for (int ky = -2; ky <= 2; ky++) {
-                for (int kx = -2; kx <= 2; kx++) {
-                    val += img[i + ky][j + kx] * kernel[ky + 2][kx + 2];
+        int k = 2; // kernel size // 5 // 2 from kernel_size/2
+
+        int i, j, m, n;
+        float sum;
+        int row_idx, col_idx;
+
+        // Percorre cada pixel da imagem de saída
+        for(i = 0; i < altura; i++) {
+            for(j = 0; j < largura; j++) {
+                sum = 0.0f;
+
+                // Aplica o kernel na região da imagem considerando o padding com "modo-edge"
+                for(m = -k; m <= k; m++) {
+                    for(n = -k; n <= k; n++) {
+                        // Índices da imagem original, aplicando padding "modo-edge"
+                        row_idx = i + m;
+                        if(row_idx < 0)
+                            row_idx = 0;
+                        else if(row_idx >= altura)
+                            row_idx = altura - 1;
+
+                        col_idx = j + n;
+                        if(col_idx < 0)
+                            col_idx = 0;
+                        else if(col_idx >= largura)
+                            col_idx = largura - 1;
+
+                        sum += img[row_idx][col_idx] * kernel[m + k][n + k];
+                    }
                 }
+
+                // Clamp + conversão para int [0, 255]
+                if(sum < 0.0f) sum = 0.0f;
+                if(sum > 255.0f) sum = 255.0f;
+
+                temp[i][j] = (int)sum;
             }
-            temp[i][j] = val / sum;
         }
-    }
-    // Copia resultado de volta
-    for(int i = 0; i < altura; i++) {
-        for(int j = 0; j < largura; j++) {
-            img[i][j] = temp[i][j];
-        }
-    }
+
+    salvar_pgm("gaussiano_teste.pgm", temp);
 }
 
 void calc_gradiente() {
     int direcao;
-    int temp_mag[89][89];
+    int temp_mag[89][89] = {0};
     int sobelGx[3][3] = {{-1,0,1}, {-2,0,2}, {-1,0,1}};
     int sobelGy[3][3] = {{-1,-2,-1}, {0,0,0}, {1,2,1}};
 
@@ -152,6 +182,8 @@ void calc_gradiente() {
             img[i][j] = temp_mag[i][j];
         }
     }
+
+    salvar_pgm("gradiente_teste.pgm",temp_mag);
 }
 
 void supr_nao_max() {
@@ -189,6 +221,7 @@ void supr_nao_max() {
             bordas[i][j] = 0;
         }
     }
+    salvar_pgm("supressao_teste.pgm",bordas);
 }
 
 void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
@@ -241,10 +274,35 @@ void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
     }
 }
 
+float compare_images(int img1[89][89], int img2[89][89]) {
+    const int altura = 89;
+    const int largura = 89;
+    float total_diff = 0.0f;
+
+    // Para PGM grayscale - apenas 1 canal
+    for (int x = 0; x < largura; x++) {
+        for (int y = 0; y < altura; y++) {
+            int diff = img1[y][x] - img2[y][x];
+            // Valor absoluto
+            if (diff < 0) {
+                total_diff += (float)(-diff) / 255.0f;
+            } else {
+                total_diff += (float)diff / 255.0f;
+            }
+        }
+    }
+
+    // Percentual de diferença
+    float percentual = 100.0f * total_diff / (float)(largura * altura);
+
+    printf("percentual de diferença entre as duas imagens: %.4f", percentual);
+    return percentual;
+}
+
 int main() {
 
     printf("Lendo imagem...\n");
-    ler_pgm("./teste.pgm");
+    ler_pgm("./musga.pgm");
 
     printf("Aplicando filtro gaussiano...\n");
     filtro_gaussiano();
