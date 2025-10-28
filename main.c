@@ -17,11 +17,14 @@
 #define PI 3.14159265
 #define KERNEL_SIZE 5
 #define K 2
+#define ALTURA 89
+#define LARGURA 89
 
-int img[89][89] = {0};
-int dir[89][89] = {0};
-int bordas[89][89] = {0};
-int largura, altura;
+int img[89][89];
+float mag[89][89];
+float dir[89][89];
+int output[89][89];
+int largura = LARGURA, altura = ALTURA;
 
 void ler_pgm(const char* filename) {
     FILE* f = fopen(filename, "r");
@@ -77,7 +80,14 @@ void salvar_pgm(const char* nome_arquivo, int matriz[89][89]) {
         }
         fprintf(f, "\n");
     }
+    printf("imagem reescrita\n");
     fclose(f);
+}
+
+void imgcopy(const int input[ALTURA][LARGURA], int output[ALTURA][LARGURA]) {
+    for(int i = 0; i < ALTURA; ++i)
+        for(int j = 0; j < LARGURA; ++j)
+            output[i][j] = input[i][j];
 }
 
 void filtro_gaussiano() {
@@ -117,104 +127,192 @@ void filtro_gaussiano() {
             if(sum < 0.0f) sum = 0.0f;
             if(sum > 255.0f) sum = 255.0f;
             temp[i][j] = (int)sum; // truncamento, igual Python
+
         }
     }
 
-    salvar_pgm("gauss.pgm", temp); // Usa o buffer temporário igual ao seu modelo
+    imgcopy(temp, img);
 }
 
-void calc_gradiente() {
-    unsigned char temp_mag[89][89] = {0};
-    int sobelGx[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
-    int sobelGy[3][3] = {{-1,-2,-1},{0,0,0},{1,2,1}};
-
-    for(int i = 1; i < 88; i++) {
-        for(int j = 1; j < 88; j++) {
-            float gx = 0, gy = 0;
-            for(int ki = -1; ki <= 1; ki++)
-                for(int kj = -1; kj <= 1; kj++) {
-                    int pixel = img[i + ki][j + kj];
-                    gx += (float)pixel * sobelGx[ki + 1][kj + 1];
-                    gy += (float)pixel * sobelGy[ki + 1][kj + 1];
-                }
-            float mag = sqrt(gx*gx + gy*gy);
-            if (mag > 255.0f) mag = 255.0f;
-            if (mag < 0.0f) mag = 0.0f;
-            temp_mag[i][j] = (unsigned char)mag; // truncamento igual a uint8
-
-            float angulo = atan2(gy, gx) * 180.0f / PI;
-            if (angulo < 0) angulo += 180.0f;
-            if (angulo < 22.5 || angulo >= 157.5)
-                dir[i][j] = 0;
-            else if (angulo < 67.5)
-                dir[i][j] = 45;
-            else if (angulo < 112.5)
-                dir[i][j] = 90;
-            else
-                dir[i][j] = 135;
-        }
-    }
-    for(int i = 0; i < 89; i++)
-        for(int j = 0; j < 89; j++)
-            img[i][j] = temp_mag[i][j];
-
-}
-
-void supr_nao_max() {
-    for (int i = 1; i < altura-1; i++) {
-        for (int j = 1; j < largura-1; j++) {
-            unsigned char mag = img[i][j];
-            int direcao = dir[i][j];
-            unsigned char n1, n2;
-            switch (direcao) {
-                case 0:   n1 = img[i][j-1];   n2 = img[i][j+1];   break;
-                case 45:  n1 = img[i-1][j+1]; n2 = img[i+1][j-1]; break;
-                case 90:  n1 = img[i-1][j];   n2 = img[i+1][j];   break;
-                case 135: n1 = img[i-1][j-1]; n2 = img[i+1][j+1]; break;
-                default:  n1 = n2 = 0;
-            }
-            bordas[i][j] = (mag >= n1 && mag >= n2) ? mag : 0;
-        }
-    }
-}
-
-void limiarizacao_histerese(int limiar_baixo, int limiar_alto) {
-    unsigned char forte = 255;
-    unsigned char fraco = 75;
-
-    for (int i = 0; i < altura; i++)
-        for (int j = 0; j < largura; j++)
-            if (bordas[i][j] >= limiar_alto)
-                bordas[i][j] = forte;
-            else if (bordas[i][j] >= limiar_baixo)
-                bordas[i][j] = fraco;
-            else
-                bordas[i][j] = 0;
-
-    int mudou = 1;
-    while (mudou) {
-        mudou = 0;
-        for (int i = 1; i < altura-1; i++) {
-            for (int j = 1; j < largura-1; j++) {
-                if (bordas[i][j] == fraco) {
-                    for (int di = -1; di <= 1; di++)
-                        for (int dj = -1; dj <= 1; dj++) {
-                            if (bordas[i+di][j+dj] == forte) {
-                                bordas[i][j] = forte;
-                                mudou = 1;
-                                goto next;
-                            }
-                        }
-                    next: ;
+void convolution(int image[ALTURA][LARGURA], int kernel[3][3], int output[ALTURA][LARGURA]) {
+    int pad = 1;
+    for(int row=0; row<ALTURA; row++) {
+        for(int col=0; col<LARGURA; col++) {
+            int sum = 0;
+            for(int i=-pad; i<=pad; i++) {
+                for(int j=-pad; j<=pad; j++) {
+                    int y = row + i, x = col + j;
+                    if(y < 0) y = 0;
+                    if(y >= ALTURA) y = ALTURA - 1;
+                    if(x < 0) x = 0;
+                    if(x >= LARGURA) x = LARGURA - 1;
+                    sum += image[y][x] * kernel[i+pad][j+pad];
                 }
             }
+            output[row][col] = sum;
+        }
+    }
+}
+
+void sobel_edge_detection(int image[ALTURA][LARGURA], float grad_mag[ALTURA][LARGURA], float grad_dir[ALTURA][LARGURA]) {
+    int gx_kernel[3][3] = {
+        {-1,0,1},
+        {-2,0,2},
+        {-1,0,1}
+    };
+    int gy_kernel[3][3] = {
+        {1,2,1},
+        {0,0,0},
+        {-1,-2,-1},
+    };
+
+    int grad_x[ALTURA][LARGURA], grad_y[ALTURA][LARGURA];
+    convolution(image, gx_kernel, grad_x);
+    convolution(image, gy_kernel, grad_y);
+
+    float max_val = 0.0f;
+    for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++) {
+        grad_mag[i][j] = sqrt(grad_x[i][j]*grad_x[i][j] + grad_y[i][j]*grad_y[i][j]);
+        if(grad_mag[i][j]>max_val)
+            max_val = grad_mag[i][j];
+    }
+    // Normaliza para 0..255
+    for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++)
+        grad_mag[i][j] = grad_mag[i][j] * 255.0f / max_val;
+
+    for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++)
+        grad_dir[i][j] = atan2f(grad_y[i][j], grad_x[i][j]) * 180.0f /PI;
+
+    printf("cheguei no sobel\n");
+}
+
+void non_max_suppression(float grad_mag[ALTURA][LARGURA],
+                         float grad_dir[ALTURA][LARGURA],
+                         int output[ALTURA][LARGURA]) {
+    for (int row = 0; row < ALTURA; row++) {
+        for (int col = 0; col < LARGURA; col++) {
+            float direction = grad_dir[row][col];
+            if (direction < 0) {
+                direction += 180;
+            }
+            float mag = grad_mag[row][col];
+            int by, bx, ay, ax;
+            float before_pixel = 0, after_pixel = 0;
+
+            if ((0 <= direction && direction < 22.5) ||
+                (157.5 <= direction && direction <= 180)) {
+                ay = by = row;
+                bx = col - 1, ax = col + 1;
+            } else if ((22.5 <= direction && direction < 67.5)) {
+                by = row + 1, bx = col - 1;
+                ay = row - 1, ax = col + 1;
+            } else if ((67.5 <= direction && direction < 112.5)) {
+                by = row - 1, ay = row + 1;
+                bx = ax = col;
+            } else {
+                by = row - 1, bx = col - 1;
+                ay = row + 1, ax = col + 1;
+            }
+
+            if (by >= 0 && bx >= 0 && by < ALTURA && bx < LARGURA)
+                before_pixel = grad_mag[by][bx];
+            if (ay >= 0 && ax >= 0 && ay < ALTURA && ax < LARGURA)
+                after_pixel = grad_mag[ay][ax];
+            if (mag >= before_pixel && mag >= after_pixel)
+                output[row][col] = (int)mag;
+            else
+                output[row][col] = 0;
+        }
+    }
+    printf("cheguei aqui na supressao\n");
+}
+
+void threshold(int img[ALTURA][LARGURA], int low, int high, int weak, int output[ALTURA][LARGURA]) {
+    for(int i=0;i<ALTURA;i++)
+        for(int j=0;j<LARGURA;j++) {
+            if(img[i][j] >= high)
+                output[i][j] = 255;
+            else if(img[i][j] >= low)
+                output[i][j] = weak;
+            else
+                output[i][j] = 0;
+        }
+    printf("cheguei aqui no threshold\n");
+}
+
+static int has_strong_neighbor(const int img[ALTURA][LARGURA], int l, int c) {
+    int strong = 255;
+    const int movs[] = {-1, 0, 1};
+    for(int i = 0; i < 3; ++i) {
+        int nl = l + movs[i];
+        if (nl < 0 || nl >= ALTURA) continue;
+        for (int j = 0; j < 3; ++j) {
+            int nc = c + movs[j];
+            if (nc < 0 || nc >= LARGURA) continue;
+            if (img[nl][nc] == strong) return 1;
+        }
+    }
+    return 0;
+}
+
+void hysteresis(int img[ALTURA][LARGURA], int weak) {
+    // 4 passes: top-down, bottom-up, left-right, right-left
+    int top_bottom[ALTURA][LARGURA], bottom_up[ALTURA][LARGURA];
+    int left_right[ALTURA][LARGURA], right_left[ALTURA][LARGURA];
+    imgcopy(img, top_bottom);
+    imgcopy(img, bottom_up);
+    imgcopy(img, left_right);
+    imgcopy(img, right_left);
+
+    int strong = 255;
+    // Pass 1: top_to_bottom
+    int i = 0, j = 0;
+    for (i = 1; i < ALTURA; ++i)
+        for (j = 1; j < LARGURA; ++j)
+            if (top_bottom[i][j] == weak) {
+                if (has_strong_neighbor(top_bottom, i, j)) {
+                    top_bottom[i][j] = strong;
+                } else {
+                    top_bottom[i][j] = 0;
+                }
+            };
+    for (i = ALTURA - 2; i >= 1; --i)
+        for (j = LARGURA - 2; j >= 1; --j)
+            if (bottom_up[i][j] == weak) {
+                if (has_strong_neighbor(bottom_up, i, j)) {
+                    bottom_up[i][j] = strong;
+                } else {
+                    bottom_up[i][j] = 0;
+                }
+            };
+    for (i = 1; i < ALTURA - 1; ++i)
+        for (j = LARGURA - 2; j >= 1; --j)
+            if (right_left[i][j] == weak) {
+                if (has_strong_neighbor(right_left, i, j)) {
+                    right_left[i][j] = strong;
+                } else {
+                    right_left[i][j] = 0;
+                }
+            };
+    for (i = ALTURA - 2; i >= 1; --i)
+        for (j = 1; j < LARGURA - 1; ++j)
+            if (left_right[i][j] == weak) {
+                if (has_strong_neighbor(left_right, i, j)) {
+                    left_right[i][j] = strong;
+                } else {
+                    left_right[i][j] = 0;
+                }
+            };
+
+    for (i = 0; i < ALTURA; ++i) {
+        for (j = 0; j < LARGURA; ++j) {
+            int soma = top_bottom[i][j] + bottom_up[i][j] + left_right[i][j] +
+                       right_left[i][j];
+            img[i][j] = (soma > 255) ? 255 : soma;
         }
     }
 
-    for (int i = 0; i < altura; i++)
-        for (int j = 0; j < largura; j++)
-            if (bordas[i][j] == fraco)
-                bordas[i][j] = 0;
+    printf("cheguei aqui na histerese");
 }
 
 float compare_images(int img1[89][89], int img2[89][89]) {
@@ -245,20 +343,29 @@ float compare_images(int img1[89][89], int img2[89][89]) {
 int main() {
 
     printf("Lendo imagem...\n");
-    ler_pgm("./musga.pgm");
+    ler_pgm("./aus.pgm");
 
     printf("Aplicando filtro gaussiano...\n");
     filtro_gaussiano();
+    salvar_pgm("gauss.pgm", img);
 
     printf("Calculando gradientes...\n");
-    calc_gradiente();
+    //calc_gradiente();
+    sobel_edge_detection(img, mag, dir);
 
     printf("Supressão não-máxima...\n");
-    supr_nao_max();
+    //supr_nao_max();
+    non_max_suppression(mag, dir, img);
+    salvar_pgm("supr.pgm", img);
 
-    printf("Realizando limiarização com estereses 30 e 75...\n");
-    limiarizacao_histerese(30, 75);
+    printf("Realizando limiarização com histereses 30 e 75...\n");
+    //limiarizacao_histerese(30, 75);
+    int weak = 75;
+    threshold(img, 30, 75, weak, output);
+    salvar_pgm("thresh.pgm", output);
+
+    hysteresis(output, weak);
 
     printf("Sobrescrevendo e salvando imagem...\n");
-    salvar_pgm("output.pgm", bordas);
+    salvar_pgm("output.pgm", output);
 }
