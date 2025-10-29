@@ -124,10 +124,9 @@ void filtro_gaussiano() {
                 }
             }
 
-            // Clamp para faixa [0, 255], SEM arredondamento ― igual Python int()
             if(sum < 0.0f) sum = 0.0f;
             if(sum > 255.0f) sum = 255.0f;
-            temp[i][j] = (int)sum; // truncamento, igual Python
+            temp[i][j] = (int)sum;
 
         }
     }
@@ -176,31 +175,22 @@ void sobel_edge_detection(int image[ALTURA][LARGURA], double grad_mag[ALTURA][LA
         if(grad_mag[i][j]>max_val)
             max_val = grad_mag[i][j];
     }
-    // Normaliza para 0..255
-    for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++)
-        grad_mag[i][j] = grad_mag[i][j] * 255.0f / max_val;
-
-    for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++)
-        grad_dir[i][j] = atan2f(grad_y[i][j], grad_x[i][j]) * (180.0f /PI) + 180;
-
-    FILE *f = fopen("grad_dir.txt", "w");
-    if (!f) {
-        perror("Erro ao abrir arquivo");
-        exit(1);
-    }
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            fprintf(f, "%.15f\n", grad_dir[i][j]); // float ou int, conforme o tipo
+    for(int i=0;i<ALTURA;i++) {
+        for(int j=0;j<LARGURA;j++) {
+            grad_mag[i][j] = grad_mag[i][j] * 255.0f / max_val;
+            grad_mag[i][j] = (long long)(grad_mag[i][j] * 1000) / 1000.0;
         }
     }
-    fclose(f);
 
-    printf("cheguei no sobel\n");
+    for(int i=0;i<ALTURA;i++) {
+        for(int j=0;j<LARGURA;j++) {
+            grad_dir[i][j] = atan2f(grad_y[i][j], grad_x[i][j]) * (180.0f /PI) + 180;
+            grad_dir[i][j] = (long long)(grad_dir[i][j] * 1000) / 1000.0;
+        }
+    }
 }
 
-void non_max_suppression(double grad_mag[ALTURA][LARGURA],
-                         double grad_dir[ALTURA][LARGURA],
-                         int output[ALTURA][LARGURA]) {
+void non_max_suppression(double grad_mag[ALTURA][LARGURA], double grad_dir[ALTURA][LARGURA], int output[ALTURA][LARGURA]) {
     for (int row = 0; row < ALTURA; row++) {
         for (int col = 0; col < LARGURA; col++) {
             if(row == 0 || col == 0 || row == ALTURA-1 || col == LARGURA-1) {
@@ -208,9 +198,7 @@ void non_max_suppression(double grad_mag[ALTURA][LARGURA],
                 continue;
             }
             double direction = grad_dir[row][col];
-            /*if (direction < 0) {
-                direction += 180;
-            }*/
+
             double mag = grad_mag[row][col];
             int by, bx, ay, ax;
             double before_pixel = 0, after_pixel = 0;
@@ -235,47 +223,29 @@ void non_max_suppression(double grad_mag[ALTURA][LARGURA],
             before_pixel = grad_mag[by][bx];
             after_pixel = grad_mag[ay][ax];
 
-            /*if (by >= 0 && bx >= 0 && by < ALTURA && bx < LARGURA)
-                before_pixel = grad_mag[by][bx];
-            if (ay >= 0 && ax >= 0 && ay < ALTURA && ax < LARGURA)
-                after_pixel = grad_mag[ay][ax];*/
             if (mag >= before_pixel && mag >= after_pixel)
-                output[row][col] = (int)mag;
+                output[row][col] = (int)floor(mag);
             else
                 output[row][col] = 0;
 
         }
     }
-    FILE *f = fopen("supr.txt", "w");
-    if (!f) {
-        perror("Erro ao abrir arquivo");
-        exit(1);
-    }
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            fprintf(f, "%d.0\n", output[i][j]); // float ou int, conforme o tipo
-        }
-    }
-    fclose(f);
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            printf("%d.0", output[i][j]); // float ou int, conforme o tipo
-        }
-        printf("\n");
-    }
-    printf("cheguei aqui na supressao\n");
 }
 
 void threshold(int img[ALTURA][LARGURA], int low, int high, int weak, int output[ALTURA][LARGURA]) {
-    for(int i=0;i<ALTURA;i++)
+    int strong = 255;
+
+    for(int i=0;i<ALTURA;i++) {
         for(int j=0;j<LARGURA;j++) {
-            if(img[i][j] >= high)
-                output[i][j] = 255;
-            else if(img[i][j] >= low)
+            if(img[i][j] >= high) {
+                printf(" %d ", img[i][j]);
+                output[i][j] = strong;
+            }
+            else if(img[i][j] <= high && img[i][j] >= low)
                 output[i][j] = weak;
-            else
-                output[i][j] = 0;
         }
+    }
+
     printf("cheguei aqui no threshold\n");
 }
 
@@ -354,57 +324,32 @@ void hysteresis(int img[ALTURA][LARGURA], int weak) {
     printf("cheguei aqui na histerese");
 }
 
-float compare_images(int img1[89][89], int img2[89][89]) {
-    const int altura = 89;
-    const int largura = 89;
-    float total_diff = 0.0f;
-
-    // Para PGM grayscale - apenas 1 canal
-    for (int x = 0; x < largura; x++) {
-        for (int y = 0; y < altura; y++) {
-            int diff = img1[y][x] - img2[y][x];
-            // Valor absoluto
-            if (diff < 0) {
-                total_diff += (float)(-diff) / 255.0f;
-            } else {
-                total_diff += (float)diff / 255.0f;
-            }
-        }
+int main(int argc, char *argv[]) {
+    if(argc < 3) {
+        printf("como usar: %s <input.pgm> <output.pgm>\n", argv[0]);
+        return 1;
     }
 
-    // Percentual de diferença
-    float percentual = 100.0f * total_diff / (float)(largura * altura);
-
-    printf("percentual de diferença entre as duas imagens: %.4f", percentual);
-    return percentual;
-}
-
-int main() {
-
     printf("Lendo imagem...\n");
-    ler_pgm("./agathar.pgm");
+    ler_pgm(argv[1]);
 
     printf("Aplicando filtro gaussiano...\n");
     filtro_gaussiano();
     salvar_pgm("gauss.pgm", img);
 
     printf("Calculando gradientes...\n");
-    //calc_gradiente();
     sobel_edge_detection(img, mag, dir);
 
-    printf("Supressão não-máxima...\n");
-    //supr_nao_max();
+    printf("Supressao nao-maxima...\n");
     non_max_suppression(mag, dir, img);
     salvar_pgm("supr.pgm", img);
 
-    printf("Realizando limiarização com histereses 30 e 75...\n");
-    //limiarizacao_histerese(30, 75);
+    printf("Realizando limiarização...\n");
     int weak = 75;
-    threshold(img, 30, 75, weak, output);
+    threshold(img, 5, 20, weak, output);
     salvar_pgm("thresh.pgm", output);
 
     hysteresis(output, weak);
-
     printf("Sobrescrevendo e salvando imagem...\n");
     salvar_pgm("output.pgm", output);
 }
