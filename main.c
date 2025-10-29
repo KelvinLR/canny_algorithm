@@ -238,7 +238,6 @@ void threshold(int img[ALTURA][LARGURA], int low, int high, int weak, int output
     for(int i=0;i<ALTURA;i++) {
         for(int j=0;j<LARGURA;j++) {
             if(img[i][j] >= high) {
-                printf(" %d ", img[i][j]);
                 output[i][j] = strong;
             }
             else if(img[i][j] <= high && img[i][j] >= low)
