@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -20,11 +21,11 @@
 #define ALTURA 89
 #define LARGURA 89
 
-int img[89][89];
-float mag[89][89];
-float dir[89][89];
-int output[89][89];
-int largura = LARGURA, altura = ALTURA;
+uint64_t img[89][89];
+double mag[89][89];
+double dir[89][89];
+uint64_t output[89][89];
+uint64_t largura = LARGURA, altura = ALTURA;
 
 void ler_pgm(const char* filename) {
     FILE* f = fopen(filename, "r");
@@ -142,10 +143,8 @@ void convolution(int image[ALTURA][LARGURA], int kernel[3][3], int output[ALTURA
             for(int i=-pad; i<=pad; i++) {
                 for(int j=-pad; j<=pad; j++) {
                     int y = row + i, x = col + j;
-                    if(y < 0) y = 0;
-                    if(y >= ALTURA) y = ALTURA - 1;
-                    if(x < 0) x = 0;
-                    if(x >= LARGURA) x = LARGURA - 1;
+                    if(y < 0 || y >= ALTURA || x < 0 || x >= LARGURA)
+                        continue;
                     sum += image[y][x] * kernel[i+pad][j+pad];
                 }
             }
@@ -154,7 +153,7 @@ void convolution(int image[ALTURA][LARGURA], int kernel[3][3], int output[ALTURA
     }
 }
 
-void sobel_edge_detection(int image[ALTURA][LARGURA], float grad_mag[ALTURA][LARGURA], float grad_dir[ALTURA][LARGURA]) {
+void sobel_edge_detection(int image[ALTURA][LARGURA], double grad_mag[ALTURA][LARGURA], double grad_dir[ALTURA][LARGURA]) {
     int gx_kernel[3][3] = {
         {-1,0,1},
         {-2,0,2},
@@ -167,10 +166,11 @@ void sobel_edge_detection(int image[ALTURA][LARGURA], float grad_mag[ALTURA][LAR
     };
 
     int grad_x[ALTURA][LARGURA], grad_y[ALTURA][LARGURA];
+
     convolution(image, gx_kernel, grad_x);
     convolution(image, gy_kernel, grad_y);
 
-    float max_val = 0.0f;
+    double max_val = 0.0f;
     for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++) {
         grad_mag[i][j] = sqrt(grad_x[i][j]*grad_x[i][j] + grad_y[i][j]*grad_y[i][j]);
         if(grad_mag[i][j]>max_val)
@@ -181,32 +181,50 @@ void sobel_edge_detection(int image[ALTURA][LARGURA], float grad_mag[ALTURA][LAR
         grad_mag[i][j] = grad_mag[i][j] * 255.0f / max_val;
 
     for(int i=0;i<ALTURA;i++)for(int j=0;j<LARGURA;j++)
-        grad_dir[i][j] = atan2f(grad_y[i][j], grad_x[i][j]) * 180.0f /PI;
+        grad_dir[i][j] = atan2f(grad_y[i][j], grad_x[i][j]) * (180.0f /PI) + 180;
+
+    FILE *f = fopen("grad_dir.txt", "w");
+    if (!f) {
+        perror("Erro ao abrir arquivo");
+        exit(1);
+    }
+    for (int i = 0; i < 89; i++) {
+        for (int j = 0; j < 89; j++) {
+            fprintf(f, "%.15f\n", grad_dir[i][j]); // float ou int, conforme o tipo
+        }
+    }
+    fclose(f);
 
     printf("cheguei no sobel\n");
 }
 
-void non_max_suppression(float grad_mag[ALTURA][LARGURA],
-                         float grad_dir[ALTURA][LARGURA],
+void non_max_suppression(double grad_mag[ALTURA][LARGURA],
+                         double grad_dir[ALTURA][LARGURA],
                          int output[ALTURA][LARGURA]) {
     for (int row = 0; row < ALTURA; row++) {
         for (int col = 0; col < LARGURA; col++) {
-            float direction = grad_dir[row][col];
-            if (direction < 0) {
-                direction += 180;
+            if(row == 0 || col == 0 || row == ALTURA-1 || col == LARGURA-1) {
+                output[row][col] = 0;
+                continue;
             }
-            float mag = grad_mag[row][col];
+            double direction = grad_dir[row][col];
+            /*if (direction < 0) {
+                direction += 180;
+            }*/
+            double mag = grad_mag[row][col];
             int by, bx, ay, ax;
-            float before_pixel = 0, after_pixel = 0;
+            double before_pixel = 0, after_pixel = 0;
 
             if ((0 <= direction && direction < 22.5) ||
-                (157.5 <= direction && direction <= 180)) {
+                (337.5 <= direction && direction <= 360)) {
                 ay = by = row;
                 bx = col - 1, ax = col + 1;
-            } else if ((22.5 <= direction && direction < 67.5)) {
+            } else if ((22.5 <= direction && direction < 67.5) ||
+                (202.5 <= direction && direction < 247.5)) {
                 by = row + 1, bx = col - 1;
                 ay = row - 1, ax = col + 1;
-            } else if ((67.5 <= direction && direction < 112.5)) {
+            } else if ((67.5 <= direction && direction < 112.5) ||
+                (247.5 <= direction && direction < 292.5)) {
                 by = row - 1, ay = row + 1;
                 bx = ax = col;
             } else {
@@ -214,15 +232,36 @@ void non_max_suppression(float grad_mag[ALTURA][LARGURA],
                 ay = row + 1, ax = col + 1;
             }
 
-            if (by >= 0 && bx >= 0 && by < ALTURA && bx < LARGURA)
+            before_pixel = grad_mag[by][bx];
+            after_pixel = grad_mag[ay][ax];
+
+            /*if (by >= 0 && bx >= 0 && by < ALTURA && bx < LARGURA)
                 before_pixel = grad_mag[by][bx];
             if (ay >= 0 && ax >= 0 && ay < ALTURA && ax < LARGURA)
-                after_pixel = grad_mag[ay][ax];
+                after_pixel = grad_mag[ay][ax];*/
             if (mag >= before_pixel && mag >= after_pixel)
                 output[row][col] = (int)mag;
             else
                 output[row][col] = 0;
+
         }
+    }
+    FILE *f = fopen("supr.txt", "w");
+    if (!f) {
+        perror("Erro ao abrir arquivo");
+        exit(1);
+    }
+    for (int i = 0; i < 89; i++) {
+        for (int j = 0; j < 89; j++) {
+            fprintf(f, "%d.0\n", output[i][j]); // float ou int, conforme o tipo
+        }
+    }
+    fclose(f);
+    for (int i = 0; i < 89; i++) {
+        for (int j = 0; j < 89; j++) {
+            printf("%d.0", output[i][j]); // float ou int, conforme o tipo
+        }
+        printf("\n");
     }
     printf("cheguei aqui na supressao\n");
 }
@@ -343,7 +382,7 @@ float compare_images(int img1[89][89], int img2[89][89]) {
 int main() {
 
     printf("Lendo imagem...\n");
-    ler_pgm("./aus.pgm");
+    ler_pgm("./agathar.pgm");
 
     printf("Aplicando filtro gaussiano...\n");
     filtro_gaussiano();
