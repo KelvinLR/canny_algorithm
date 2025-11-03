@@ -13,6 +13,14 @@
  * @author  Marcelo Antônio Dantas Filho
  * 
  * @date    29/10/2025
+ * 
+ * @platform Nucleo STM32F030
+ * @usage   Compilar:
+ *              gcc main.c -o canny.exe
+ *          Executar:
+ *              ./canny.exe <imagem_entrada.pgm> <imagem_saida.pgm>
+ *          Exemplo:
+ *              ./canny.exe cereja.pgm output.pgm
  */
 
 #include <stdio.h>
