@@ -1,7 +1,8 @@
 /** ALGORITMO CANNY PARA DETECÇÃO DE BORDAS
  * 
  * @file    main.c
- * @brief   Implementação from scratch do algoritmo Canny de detecção de bordas.
+ * @brief   Implementação from scratch do algoritmo Canny de 
+ *          detecção de bordas para trabalho da disciplina de SEMB.
  * 
  * PASSO A PASSO
  * \_ 1) aplicação de filtro gaussiano 2D
