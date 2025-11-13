@@ -12,15 +12,15 @@
 uint8_t img[89][89]; //< Matriz que recebe a imagem de entrada
 //double mag[89][89]; //< Matriz para armazenar a magnitude do gradiente
 //double dir[89][89]; //< Matriz para armazenar a direção do gradiente
-uint64_t output[89][89]; //< Matriz que receberá a imagem de saída
+// uint8_t output[89][89]; //< Matriz que receberá a imagem de saída
 
 uint64_t largura = LARGURA, altura = ALTURA; // atribuindo o valor das constantes às variáveis largura e altura
 
 /**
  * @brief   Lê uma imagem PGM formato ASCII (P2) 89x89 e armazena em 'img'
- * 
+ *
  * @param   filename    caminho do arquivo PGM
- * 
+ *
  */
 void ler_pgm(const char* filename) {
     FILE* f = fopen(filename, "r");
@@ -61,7 +61,7 @@ void ler_pgm(const char* filename) {
 
 /**
  * @brief   Salva uma matriz 89x89 no formato PGM P2
- * 
+ *
  * @param   nome_arquivo    nome do arquivo de saída
  * @param   matriz    matriz da imagem a ser escrita
  */
@@ -82,300 +82,196 @@ void salvar_pgm(const char* nome_arquivo, uint8_t matriz[89][89]) {
     fclose(f);
 }
 
-/**
- * @brief   copia uma matriz para outra (89x89)
- * @param   input   matriz origem
- * @param   output  matriz destino
- */
-void imgcopy(const uint8_t input[ALTURA][LARGURA], uint8_t output[ALTURA][LARGURA]) {
-    for(int i = 0; i < ALTURA; ++i)
-        for(int j = 0; j < LARGURA; ++j)
-            output[i][j] = input[i][j];
+// -------------------------------------------------
+// copia matriz (mesmo tipo e dimensões)
+// -------------------------------------------------
+void imgcopy_uint8(const uint8_t src[ALTURA][LARGURA], uint8_t dst[ALTURA][LARGURA]) {
+    for (int i = 0; i < ALTURA; ++i)
+        for (int j = 0; j < LARGURA; ++j)
+            dst[i][j] = src[i][j];
 }
 
-/**
- * @brief   aplica o Gaussian Blur para redução de ruídos na imagem
- */
-void filtro_gaussiano() {
-    uint8_t temp[1][89]; //< buffer temporário
-
-    // kernel padrão 5x5 pré normalizado com a soma dos elementos da matriz
-    double kernel[5][5] = {
-        {2.0f/159.0f, 4.0f/159.0f, 5.0f/159.0f, 4.0f/159.0f, 2.0f/159.0f},
-        {4.0f/159.0f, 9.0f/159.0f, 12.0f/159.0f, 9.0f/159.0f, 4.0f/159.0f},
-        {5.0f/159.0f, 12.0f/159.0f, 15.0f/159.0f, 12.0f/159.0f, 5.0f/159.0f},
-        {4.0f/159.0f, 9.0f/159.0f, 12.0f/159.0f, 9.0f/159.0f, 4.0f/159.0f},
-        {2.0f/159.0f, 4.0f/159.0f, 5.0f/159.0f, 4.0f/159.0f, 2.0f/159.0f}
+// -------------------------------------------------
+// filtro gaussiano (usa buffer temp com mesmas dims)
+// -------------------------------------------------
+void filtro_gaussiano(uint8_t img[ALTURA][LARGURA]) {
+    static const float kernel[5][5] = {
+            {2.0f/159.0f, 4.0f/159.0f, 5.0f/159.0f, 4.0f/159.0f, 2.0f/159.0f},
+            {4.0f/159.0f, 9.0f/159.0f,12.0f/159.0f, 9.0f/159.0f, 4.0f/159.0f},
+            {5.0f/159.0f,12.0f/159.0f,15.0f/159.0f,12.0f/159.0f, 5.0f/159.0f},
+            {4.0f/159.0f, 9.0f/159.0f,12.0f/159.0f, 9.0f/159.0f, 4.0f/159.0f},
+            {2.0f/159.0f, 4.0f/159.0f, 5.0f/159.0f, 4.0f/159.0f, 2.0f/159.0f}
     };
 
-    int k = 2; //< variável para calcular o deslocamento em torno do pixel central
-    int i, j, m, n;
-    float sum; //< acumulador
-    int row_idx, col_idx; //<índices de linhas e colunas
+    uint8_t temp[ALTURA][LARGURA];
 
-    // laço para percorrer cada pixel da imagem de saída
-    for(i = 0; i < altura; i++) {
-        for(j = 0; j < largura; j++) {
-
-            sum = 0.0f; // zera o acumulador sum p/ esse pixel
-
-            // aplicação do kernel na vizinhança do pixel atual
-            for(m = -k; m <= k; m++) {
-                for(n = -k; n <= k; n++) {
-
-                    // calcula o indice da linha vizinha ao kernel
-                    row_idx = i + m;
-                    // se estiver fora ajusta para a borda mais proxima
-                    if(row_idx < 0)
-                        row_idx = 0;
-
-                    else if(row_idx >= altura)
-                        row_idx = altura - 1;
-
-                    // mesmo calculo mas para coluna
-                    col_idx = j + n;
-                    if(col_idx < 0)
-                        col_idx = 0;
-
-                    else if(col_idx >= largura)
-                        col_idx = largura - 1;
-
-                    // multiplica o pixel correspondente pelo valor do kernel
-                    // acumula o resultado no acumulador sum
-                    sum += img[row_idx][col_idx] * kernel[m + k][n + k];
+    for (int i = 0; i < ALTURA; ++i) {
+        for (int j = 0; j < LARGURA; ++j) {
+            float sum = 0.0f;
+            for (int m = -2; m <= 2; ++m) {
+                for (int n = -2; n <= 2; ++n) {
+                    int y = i + m;
+                    int x = j + n;
+                    if (y < 0) y = 0;
+                    if (x < 0) x = 0;
+                    if (y >= ALTURA) y = ALTURA - 1;
+                    if (x >= LARGURA) x = LARGURA - 1;
+                    sum += img[y][x] * kernel[m + 2][n + 2];
                 }
             }
-
-            // limita os valores para ficar entre 0 e 255
-            if(sum < 0.0f)
-                sum = 0.0f;
-
-            if(sum > 255.0f)
-                sum = 255.0f;
-            // passagem do valor (typecasting) inteiro para a matriz temporária
-            temp[i][j] = (int)sum;
-
+            if (sum < 0.0f) sum = 0.0f;
+            if (sum > 255.0f) sum = 255.0f;
+            temp[i][j] = (uint8_t)(sum + 0.5f);
         }
     }
-    // copia a imagem em temp para a matriz img
-    imgcopy(temp, img);
+
+    imgcopy_uint8(temp, img);
 }
 
-/**
- * @brief   realiza a convolução do kernel com a imagem
- * 
- * @param   image   imagem de entrada
- * @param   kernel  kernel 3x3
- * @param   output  matriz resultado da convolução
- */
-void convolution(uint8_t image[ALTURA][LARGURA], uint8_t kernel[3][3], uint8_t output[ALTURA][LARGURA]) {
-    int pad = 1; //< padding para kernel padrão 3x3 -> qtd de pixels da margem
-
-    for(int row=0; row<ALTURA; row++) {
-        for(int col=0; col<LARGURA; col++) {
-            int sum = 0; //< acumulador
-
-            for(int i=-pad; i<=pad; i++) {
-                for(int j=-pad; j<=pad; j++) {
-
-                    int y = row + i, x = col + j;
-                    // condicional para verificar as bordas, caso
-                    // os vizinhos estejam fora dos limites da img (ultrapassando a borda),
-                    // a posição será ignorada
-                    if(y < 0 || y >= ALTURA || x < 0 || x >= LARGURA)
-                        continue;
-                    // preenche a variável sum com o produto do valor do pixel com o Kernel
-                    sum += image[y][x] * kernel[i+pad][j+pad];
+// -------------------------------------------------
+// convolution: image (uint8) with 3x3 kernel -> int output
+// use int output to hold sums safely
+// -------------------------------------------------
+void convolution_int(const uint8_t image[ALTURA][LARGURA], const int kernel[3][3], int output[ALTURA][LARGURA]) {
+    int pad = 1;
+    for (int row = 0; row < ALTURA; ++row) {
+        for (int col = 0; col < LARGURA; ++col) {
+            int sum = 0;
+            for (int i = -pad; i <= pad; ++i) {
+                for (int j = -pad; j <= pad; ++j) {
+                    int y = row + i;
+                    int x = col + j;
+                    if (y < 0 || y >= ALTURA || x < 0 || x >= LARGURA) continue;
+                    sum += image[y][x] * kernel[i + pad][j + pad];
                 }
             }
-            // popula a matriz de saída com o resultado da convolucao acumulado em sum
             output[row][col] = sum;
         }
     }
 }
 
-/**
- * @brief   Calcula os gradientes usando os operadores de Sobel
- * 
- * @param   image       imagem de entrada
- * @param   grad_mag    matriz de magnitudes do gradiente
- * @param   grad_dir    matriz de direção dos gradientes (em graus)
- */
-void sobel_edge_detection(uint8_t img[89][89]) {
-    int grad_x[89][89], grad_y[89][89];
-    double mag[89][89];
-    double max_val = 0.0;
+// -------------------------------------------------
+// non-max suppression: grad_mag and grad_dir (float/double) -> uint8_t output
+// -------------------------------------------------
+void non_max_suppression(const float grad_mag[ALTURA][LARGURA], const float grad_dir[ALTURA][LARGURA],
+                         uint8_t output[ALTURA][LARGURA]) {
+    // inicializa bordas com zero
+    for (int r = 0; r < ALTURA; ++r)
+        for (int c = 0; c < LARGURA; ++c)
+            output[r][c] = 0;
 
-    int gx_kernel[3][3] = {
-        {-1, 0, 1},
-        {-2, 0, 2},
-        {-1, 0, 1}
-    };
-    int gy_kernel[3][3] = {
-        {1, 2, 1},
-        {0, 0, 0},
-        {-1, -2, -1}
-    };
+    for (int row = 1; row < ALTURA - 1; ++row) {
+        for (int col = 1; col < LARGURA - 1; ++col) {
+            float direction = grad_dir[row][col];
+            float mag = grad_mag[row][col];
 
-    // Aplica convolução para grad_x e grad_y
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            int gx = 0, gy = 0;
-            // Bordas: igual ao convolution com "clamping" para i+ki e j+kj dentro dos limites
-            for (int ki = -1; ki <= 1; ki++) {
-                int ni = i + ki;
-                if (ni < 0) ni = 0;
-                if (ni > 88) ni = 88;
-                for (int kj = -1; kj <= 1; kj++) {
-                    int nj = j + kj;
-                    if (nj < 0) nj = 0;
-                    if (nj > 88) nj = 88;
-                    gx += img[ni][nj] * gx_kernel[ki+1][kj+1];
-                    gy += img[ni][nj] * gy_kernel[ki+1][kj+1];
-                }
-            }
-            grad_x[i][j] = gx;
-            grad_y[i][j] = gy;
-            mag[i][j] = sqrt((double)gx*gx + (double)gy*gy);
-            if (mag[i][j] > max_val)
-                max_val = mag[i][j];
-        }
-    }
-    // Normaliza e copia para img
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            //
-            img[i][j] = (uint8_t)(mag[i][j] * 255.0 / max_val + 0.5); // +0.5 garante arredondamento
-        }
-    }
-}
+            // quantize direction to one of 4 sectors (0,45,90,135)
+            float q = 0.0f, r = 0.0f;
+            // normalize angle to [-180,180)
+            while (direction <= -180.0f) direction += 360.0f;
+            while (direction > 180.0f) direction -= 360.0f;
 
-
-/**
- * @brief   realiza a supressão não-máxima na matriz de magnitudes do gradiente
- * 
- * mantém apenas os pixels que correspondem a máximos locais ao longo da direção do gradiente
- * 
- * @param   grad_mag    magnitude do gradiente
- * @param   grad_dir    direção do gradiente
- * @param   output      matriz de saída após supressão
- */
-void non_max_suppression(uint8_t img[89][89]) {
-    uint8_t result[89][89];
-
-    for (int i = 1; i < 88; i++) {
-        for (int j = 1; j < 88; j++) {
-            uint8_t mag = img[i][j];
-
-            // Checa se é máximo horizontal
-            uint8_t before_h = img[i][j-1];
-            uint8_t after_h  = img[i][j+1];
-
-            // Checa se é máximo vertical
-            uint8_t before_v = img[i-1][j];
-            uint8_t after_v  = img[i+1][j];
-
-            // Mantém o pixel se for máximo em qualquer direção
-            if ((mag >= before_h && mag >= after_h) ||
-                (mag >= before_v && mag >= after_v)) {
-                result[i][j] = mag;
+            if ((direction >= -22.5f && direction <= 22.5f) || (direction <= -157.5f || direction > 157.5f)) {
+                q = grad_mag[row][col + 1];
+                r = grad_mag[row][col - 1];
+            } else if ((direction > 22.5f && direction <= 67.5f) || (direction <= -112.5f && direction > -157.5f)) {
+                q = grad_mag[row + 1][col - 1];
+                r = grad_mag[row - 1][col + 1];
+            } else if ((direction > 67.5f && direction <= 112.5f) || (direction <= -67.5f && direction > -112.5f)) {
+                q = grad_mag[row + 1][col];
+                r = grad_mag[row - 1][col];
             } else {
-                result[i][j] = 0;
+                q = grad_mag[row - 1][col - 1];
+                r = grad_mag[row + 1][col + 1];
             }
-        }
-    }
-    // Copia resultado para buffer principal
-    for (int i = 1; i < 88; i++)
-        for (int j = 1; j < 88; j++)
-            img[i][j] = result[i][j];
-}
 
-/**
- * @brief   aplica a limiarização com pixels fortes e fracos e descarta o resto
- * 
- * Classifica pixels:
- * 
- * - >= high -> forte (255);
- * 
- * - entre low e high -> fraco;
- * 
- * - resto -> 0
- * 
- * @param   img     imagem de entrada
- * @param   low     limiar baixo
- * @param   high    limiar alto
- * @param   weak    valor atribuído aos pixels fracos
- * @param   output  matriz resultante da limiarização
- */
-void threshold(uint8_t img[89][89], uint8_t low, uint8_t high, uint8_t weak) {
-    for (int i = 0; i < 89; i++) {
-        for (int j = 0; j < 89; j++) {
-            if (img[i][j] >= high)
-                img[i][j] = 255; // forte
-            else if (img[i][j] >= low)
-                img[i][j] = weak; // fraco
+            if (mag >= q && mag >= r)
+                output[row][col] = (uint8_t)(mag > 255.0f ? 255 : (int)(mag + 0.5f));
             else
-                img[i][j] = 0;
+                output[row][col] = 0;
         }
     }
 }
 
+// -------------------------------------------------
+// Sobel: uses convolution_int, computes grad_mag and grad_dir (float),
+// then calls non_max_suppression to produce uint8_t edge image (out_img)
+// -------------------------------------------------
+void sobel_edge_detection(const uint8_t image_in[ALTURA][LARGURA], uint8_t out_img[ALTURA][LARGURA]) {
+    const int gx_kernel[3][3] = { {-1,0,1}, {-2,0,2}, {-1,0,1} };
+    const int gy_kernel[3][3] = { {1,2,1}, {0,0,0}, {-1,-2,-1} };
 
-/**
- * @brief   verifica se existe algum vizinho 3x3 com valor de pixel forte (255)
- * 
- * @param   img    imagem de entrada
- * @param   l   coordenada da linha
- * @param   c   coordenada da coluna
- * 
- * @returns 1, se encontrar;
- * 
- * 0, se não encontrar.
- */
-static int has_strong_neighbor(const uint8_t img[ALTURA][LARGURA], int l, int c) {
-    int strong = 255;
-    const int movs[] = {-1, 0, 1};
+    int grad_x[ALTURA][LARGURA];
+    int grad_y[ALTURA][LARGURA];
+    float grad_mag[ALTURA][LARGURA];
+    float grad_dir[ALTURA][LARGURA];
 
-    for(int i = 0; i < 3; ++i) {
-        int nl = l + movs[i];
+    convolution_int(image_in, (int (*)[3])gx_kernel, grad_x);
+    convolution_int(image_in, (int (*)[3])gy_kernel, grad_y);
 
-        if (nl < 0 || nl >= ALTURA) continue; // limita aos limites da imagem
+    float max_val = 0.0f;
+    for (int i = 0; i < ALTURA; ++i) {
+        for (int j = 0; j < LARGURA; ++j) {
+            float gx = (float)grad_x[i][j];
+            float gy = (float)grad_y[i][j];
+            grad_mag[i][j] = sqrtf(gx*gx + gy*gy);
+            grad_dir[i][j] = atan2f(gy, gx) * (180.0f / (float)PI); // degrees
+            if (grad_mag[i][j] > max_val) max_val = grad_mag[i][j];
+        }
+    }
 
-        for (int j = 0; j < 3; ++j) {
-            int nc = c + movs[j];
+    if (max_val <= 0.0f) max_val = 1.0f; // evita divisão por zero
 
-            if (nc < 0 || nc >= LARGURA) continue;
+    // normaliza para 0..255
+    for (int i = 0; i < ALTURA; ++i)
+        for (int j = 0; j < LARGURA; ++j)
+            grad_mag[i][j] = (grad_mag[i][j] / max_val) * 255.0f;
 
-            if (img[nl][nc] == strong) return 1;  // retorna que encontrou vizinho forte
+    // supressão não-máxima -> out_img
+    non_max_suppression(grad_mag, grad_dir, out_img);
+}
+
+// -------------------------------------------------
+// threshold in-place (uint8_t image -> values 0, weak, 255)
+// -------------------------------------------------
+void threshold_inplace(uint8_t img[ALTURA][LARGURA], int low, int high, uint8_t weak) {
+    for (int i = 0; i < ALTURA; ++i) {
+        for (int j = 0; j < LARGURA; ++j) {
+            uint8_t v = img[i][j];
+            if (v >= high) img[i][j] = 255;
+            else if (v >= low) img[i][j] = weak;
+            else img[i][j] = 0;
+        }
+    }
+}
+
+// -------------------------------------------------
+// has_strong_neighbor adjusted for uint8_t
+// -------------------------------------------------
+static int has_strong_neighbor_uint8(const uint8_t img[ALTURA][LARGURA], int l, int c) {
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            int y = l + dy;
+            int x = c + dx;
+            if (y < 0 || y >= ALTURA || x < 0 || x >= LARGURA) continue;
+            if (img[y][x] == 255) return 1;
         }
     }
     return 0;
 }
 
-/**
- * @brief   faz o rastreamento de bordas por histerese,
- * fazendo com que pixels fracos conectados a fortes sejam postos em evidencia; o resto é zerado.
- * 
- * @param   img     imagem de entrada
- * @param   weak    valor do pixel fraco
- */
-void hysteresis(uint8_t img[89][89], uint8_t weak) {
-    // 1a passada: de cima para baixo
-    for (int i = 1; i < 88; i++) {
-        for (int j = 1; j < 88; j++) {
-            if (img[i][j] == weak) {
-                if (img[i-1][j] == 255 || img[i+1][j] == 255 || img[i][j-1] == 255 || img[i][j+1] == 255)
-                    img[i][j] = 255;
-                else
-                    img[i][j] = 0;
-            }
-        }
-    }
-    // 2a passada: de baixo para cima (garante propagação)
-    for (int i = 87; i >= 1; i--) {
-        for (int j = 87; j >= 1; j--) {
-            if (img[i][j] == weak) {
-                if (img[i-1][j] == 255 || img[i+1][j] == 255 || img[i][j-1] == 255 || img[i][j+1] == 255)
+// -------------------------------------------------
+// hysteresis in-place (works on uint8_t image using weak/strong)
+// -------------------------------------------------
+void hysteresis_inplace(uint8_t img[ALTURA][LARGURA], uint8_t weak) {
+    // cria cópia para leituras consistentes
+    uint8_t copy_img[ALTURA][LARGURA];
+    imgcopy_uint8(img, copy_img);
+
+    for (int i = 1; i < ALTURA - 1; ++i) {
+        for (int j = 1; j < LARGURA - 1; ++j) {
+            if (copy_img[i][j] == weak) {
+                if (has_strong_neighbor_uint8(copy_img, i, j))
                     img[i][j] = 255;
                 else
                     img[i][j] = 0;
@@ -383,25 +279,23 @@ void hysteresis(uint8_t img[89][89], uint8_t weak) {
         }
     }
 }
-
-
 /**
  * @brief   função main
- * 
+ *
  * executa o pipeline do Canny:
- * 
+ *
  * - leitura PGM;
- * 
+ *
  * - filtro gaussiano;
- * 
+ *
  * - sobel;
- * 
+ *
  * - supressão não-máxima;
- * 
+ *
  * - limiarização + histerese;
- * 
+ *
  * @param   argc    número de argumentos
- * @param   argv [1]    arquivo entrada .pgm; [2]   saída .pgm 
+ * @param   argv [1]    arquivo entrada .pgm; [2]   saída .pgm
  */
 int main(int argc, char *argv[]) {
     if(argc < 3) {
@@ -413,24 +307,24 @@ int main(int argc, char *argv[]) {
     ler_pgm(argv[1]);
 
     printf("filtro gaussiano...\n");
-    filtro_gaussiano();
+    filtro_gaussiano(img);
     salvar_pgm("gauss.pgm", img);
 
     printf("calculando gradientes...\n");
-    sobel_edge_detection(img);
-    salvar_pgm("sobel.pgm", img);
+    sobel_edge_detection(img, img);
+    salvar_pgm("supr.pgm", img);
 
     printf("supr nao-maxima...\n");
-    non_max_suppression(img);
-    salvar_pgm("supr.pgm", img);
+    //non_max_suppression(img);
+    //salvar_pgm("supr.pgm", img);
 
     printf("fazendo a limiarização...\n");
     int weak = 75;
-    threshold(img, 5, 20, weak);
+    threshold_inplace(img, 5, 20, 75);
     salvar_pgm("thresh.pgm", img);
 
     printf("finalizando com histerese...\n");
-    hysteresis(img, weak);
+    hysteresis_inplace(img, weak);
 
     printf("salvando img...\n");
     salvar_pgm("output.pgm", img);
