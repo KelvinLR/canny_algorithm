@@ -4,8 +4,9 @@ import serial
 import time
 import matplotlib.pyplot as plt
 
-ser = serial.Serial("COM9", 115200, timeout=5)
+ser = serial.Serial("COM7", 115200, timeout=3)
 
+# funções de ler e salvar PGM
 def read_pgm(path):
     with open(path, 'r') as f:
         lines = [l.strip() for l in f if l.strip() and not l.startswith('#')]
@@ -32,15 +33,14 @@ def save_pgm(path, image, maxval=255):
             if count % 20 == 0:
                 f.write("\n")  
 
+# vai fazer um "padded" da imagem do tamanho do tile total, mas colocando o tile util e bordas
 def make_padded_from_image(img, x, y, TILE_TOTAL, TILE_UTIL, BORDER):
-    """
-    Constrói padded de tamanho TILE_TOTAL x TILE_TOTAL a partir da imagem,
-    fazendo clamp nas bordas (replicação).
-    x,y = coordenada (coluna, linha) do canto superior esquerdo da tile util.
-    """
+
     H, W = img.shape
     padded = np.zeros((TILE_TOTAL, TILE_TOTAL), dtype=np.uint8)
-    # cada posição i,j do padded corresponde a img[ y - BORDER + i, x - BORDER + j ] com clamp
+
+    # percorre todos os pixels do tile de destino padded
+    # calcula quais coordenadas na img de entrada vao ser copiadas para cada ponto do tile
     for i in range(TILE_TOTAL):
         img_y = y - BORDER + i
         if img_y < 0:
@@ -56,30 +56,43 @@ def make_padded_from_image(img, x, y, TILE_TOTAL, TILE_UTIL, BORDER):
             padded[i, j] = img[img_y, img_x]
     return padded
 
-img = read_pgm("canny_algorithm/serial/melbourne.pgm")
+# lendo a imagem completa
+img = read_pgm("cereja.pgm")
+# obtendo largura e altura da imagem
 H, W = img.shape
 
+# essas variáveis auxiliam no processamento, pois estamos trabalhando com
+# processamento em janelas, o tile total vai ser o tanto q o STM vai receber
+# o tile util vai ser o tanto que vai ser processado e o border é necessário 
+# para pegar o "contexto" q sao os elementos próximos p reduzir os impactos do tile processing
 TILE_UTIL = 16
 BORDER = 4
 TILE_TOTAL = TILE_UTIL + 2 * BORDER
 
+# aqui essa matriz ta inicializada c zeros e vai armazenar a img reconstruída
 reconstructed = np.zeros_like(img)
 
+# divide em blocos do tamanho do tile util para o embarcado processar
 for y in range(0, H, TILE_UTIL):      
     for x in range(0, W, TILE_UTIL):   
+        # monta um tile padded de tamanho TILE_TOTAL (tamanho útil + bordas BORDER p pegar contexto)
         padded = make_padded_from_image(img, x, y, TILE_TOTAL, TILE_UTIL, BORDER)
 
+        # cria um cabeçalho c os dados do tile, incluindo dimensões e posição (x, y)
+        # envia um byte de sincronismo 'S', o cabeçalho e o tile completo via serial
         header = struct.pack("<HHHH", TILE_TOTAL, TILE_TOTAL, x, y)
         ser.write(b'S')
         ser.write(header)
         ser.write(padded.tobytes())
 
+        # recebe um byte de volta para garantir sincronia, caso contrário ignora o tile atual
         sync = ser.read(1)
         if sync != b'S':
             print("❌ Erro de sincronismo, ignorando tile")
             ser.reset_input_buffer()
             continue
 
+        # recebe  cabeçalho e tile processada
         rx_header = ser.read(8)
         rx_data = ser.read(TILE_TOTAL * TILE_TOTAL)
 
@@ -87,28 +100,36 @@ for y in range(0, H, TILE_UTIL):
             print("❌ Tamanho incorreto, pulando tile")
             continue
 
+        # desempacota as informações no cabeçalho e
+        # converte os dados recebidos para matriz numpy
         rh, rw, rx, ry = struct.unpack("<HHHH", rx_header)
         tile = np.frombuffer(rx_data, dtype=np.uint8).reshape((TILE_TOTAL, TILE_TOTAL))
 
         # corta borda e coloca no lugar certo
         useful = tile[BORDER:BORDER+TILE_UTIL, BORDER:BORDER+TILE_UTIL]
-
+        
+        # grante que não sejam acessadas posições fora da imagem original
         y_end = min(ry + TILE_UTIL, H)
         x_end = min(rx + TILE_UTIL, W)
+
+        # reconstrói a imagem
         reconstructed[ry:y_end, rx:x_end] = useful[:y_end-ry, :x_end-rx]
 
+        # espera um byte q indica do fim do processamento do tile.
         end_flag = ser.read(1)
         print(f"✅ Tile ({x},{y}) ecoado ({rh}x{rw}) fim={end_flag}")
+        # delay de 0.02s entre cada tile
         time.sleep(0.02)
-        
+
+# fecha a comunicação serial
 ser.close()
 
-save_pgm("canny_algorithm/serial/reconstructed.pgm", reconstructed)
+save_pgm("cereja_reconstructed.pgm", reconstructed)
 
 plt.subplot(1,2,1)
 plt.title("Original")
 plt.imshow(img, cmap="gray")
 plt.subplot(1,2,2)
-plt.title("Ecoada")
+plt.title("Processada")
 plt.imshow(reconstructed, cmap="gray")
 plt.show()
