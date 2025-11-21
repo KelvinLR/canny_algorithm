@@ -1,3 +1,52 @@
+"""
+Arquivo: main.py
+Descrição:
+    Implementa o envio de tiles de imagem para um sistema embarcado via porta serial,
+    incluindo empacotamento, transmissão, recepção e reconstrução da imagem completa.
+    O script realiza:
+        - Leitura de imagem PGM (formato P2)
+        - Montagem de tiles com bordas replicadas (padding)
+        - Envio dos tiles para um dispositivo STM32
+        - Recebimento dos tiles processados
+        - Reconstrução da imagem final
+        - Salvamento e visualização dos resultados
+
+Objetivo:
+    Fornecer uma pipeline completa para realizar processamento distribuído de imagens
+    em janelas (tiling) com contexto, permitindo que cada bloco seja processado
+    independentemente no hardware embarcado.
+
+Dependências:
+    - numpy
+    - serial (pyserial)
+    - struct
+    - matplotlib
+    - time
+
+Funções principais:
+    read_pgm(path):
+        Lê uma imagem no formato PGM ASCII (P2) e retorna um array numpy.
+
+    save_pgm(path, image, maxval=255):
+        Salva um array numpy no formato PGM ASCII.
+
+    make_padded_from_image(img, x, y, TILE_TOTAL, TILE_UTIL, BORDER):
+        Gera um tile com bordas replicadas ao redor da região útil da imagem.
+
+Notas:
+    O protocolo serial envolve:
+        - byte 'S' de sincronização
+        - cabeçalho com dimensões e posição do tile
+        - envio/recebimento dos dados brutos do tile
+    A reconstrução usa apenas a região útil do tile retornado.
+
+Autores:
+    Kelvin de Lima Rodrigues
+    Marcelo Antônio Dantas Filho
+
+Data:
+    14/11/2025
+"""
 import struct
 import numpy as np
 import serial
@@ -8,6 +57,18 @@ ser = serial.Serial("COM7", 115200, timeout=3)
 
 # funções de ler e salvar PGM
 def read_pgm(path):
+    """Lê uma imagem PGM no formato ASCII (P2) e retorna como um numpy array.
+
+    Args:
+        path (string): Caminho da imagem PGM
+
+    Raises:
+        ValueError: Formato inválido
+        ValueError: Tamanho inconsistente
+
+    Returns:
+        pixels (ndarray): Imagem em numpy array
+    """
     with open(path, 'r') as f:
         lines = [l.strip() for l in f if l.strip() and not l.startswith('#')]
     if not lines or lines[0] != 'P2':
@@ -20,6 +81,13 @@ def read_pgm(path):
     return pixels.reshape((height, width))
 
 def save_pgm(path, image, maxval=255):
+    """Salva uma imagem numpy array no formato PGM ASCII (P2).
+
+    Args:
+        path (string): Caminho para salvar a imagem PGM
+        image (ndarray): Imagem em numpy array
+        maxval (int, optional): Valor máximo atribuído por pixel. Default 255.
+    """
     height, width = image.shape
     with open(path, 'w') as f:
         f.write("P2\n")
@@ -35,6 +103,25 @@ def save_pgm(path, image, maxval=255):
 
 # vai fazer um "padded" da imagem do tamanho do tile total, mas colocando o tile util e bordas
 def make_padded_from_image(img, x, y, TILE_TOTAL, TILE_UTIL, BORDER):
+    """Gera um tile "padded" a partir da imagem original, aplicando bordas replicadas.
+
+    A função cria um tile quadrado de tamanho TILE_TOTAL x TILE_TOTAL que contém:
+    - A região útil (TILE_UTIL x TILE_UTIL) ao redor da posição (x, y) da imagem original.
+    - Bordas (padding) replicadas para permitir processamento em janelas com contexto.
+
+    Args:
+        img (ndarray): Imagem completa de entrada (H x W).
+        x (int): Coordenada X (coluna) do canto superior-esquerdo da região útil.
+        y (int): Coordenada Y (linha) do canto superior-esquerdo da região útil.
+        TILE_TOTAL (int): Tamanho total do tile enviado ao sistema embarcado
+            (útil + 2*borda).
+        TILE_UTIL (int): Tamanho apenas da área útil que será processada.
+        BORDER (int): Quantidade de pixels de borda adicionados ao redor do tile.
+
+    Returns:
+        ndarray: Tile preenchido com valores da imagem usando replicação de bordas,
+        com formato (TILE_TOTAL, TILE_TOTAL).
+    """
 
     H, W = img.shape
     padded = np.zeros((TILE_TOTAL, TILE_TOTAL), dtype=np.uint8)
