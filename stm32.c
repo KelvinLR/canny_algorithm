@@ -1,3 +1,18 @@
+/**
+ * @file stm32.c
+ * @brief Implementação do algoritmo de Canny Edge Detection em um microcontrolador STM32
+ * 
+ * O algoritmo segue 4 etapas principais:
+ * 1. Suavização da imagem com filtro Gaussiano
+ * 2. Cálculo do gradiente usando operadores Sobel
+ * 3. Supressão não máxima para afinar as bordas
+ * 4. Histerese para conectar bordas fracas a bordas fortes
+ * 
+ * @author Kelvin de Lima Rodrigues
+ * @author Marcelo Antônio Dantas Filho
+ * @date 14/11/2025
+ */
+
 #include "stm32f0xx_hal.h"
 #include <stdint.h>
 #include <math.h>
@@ -20,12 +35,23 @@ uint8_t tile[TILE][TILE];
 float grad_mag[TILE][TILE];
 float grad_dir[TILE][TILE];
 
+/**
+ * @brief Função para copiar uma imagem de uint8_t
+ * 
+ * @param src Matriz de origem
+ * @param dst Matriz de destino
+ */
 void imgcopy_uint8(const uint8_t src[TILE][TILE], uint8_t dst[TILE][TILE]) {
    for (int i = 0; i < TILE; ++i)
        for (int j = 0; j < TILE; ++j)
            dst[i][j] = src[i][j];
 }
 
+/**
+ * @brief Aplica um filtro Gaussiano 5x5 na imagem
+ * 
+ * @param img Matriz da imagem a ser filtrada
+ */
 void filtro_gaussiano(uint8_t img[TILE][TILE]) {
    static const float kernel[5][5] = {
            {2.0f/159.0f, 4.0f/159.0f, 5.0f/159.0f, 4.0f/159.0f, 2.0f/159.0f},
@@ -58,6 +84,13 @@ void filtro_gaussiano(uint8_t img[TILE][TILE]) {
    imgcopy_uint8(temp, img);
 }
 
+/**
+ * @brief Realiza a operação de convolução entre uma imagem e um kernel
+ * 
+ * @param image Matriz da imagem de entrada
+ * @param kernel Matriz do kernel de convolução
+ * @param output Matriz de saída da convolução
+ */
 void convolution(uint8_t image[TILE][TILE], int8_t kernel[3][3], int16_t output[TILE][TILE]) {
    int pad = 1; // padding para kernel padrão 3x3 -> qtd de pixels da margem
    for(int row=0; row<TILE; row++) {
@@ -81,6 +114,13 @@ void convolution(uint8_t image[TILE][TILE], int8_t kernel[3][3], int16_t output[
    }
 }
 
+/**
+ * @brief Realiza a detecção de bordas usando o operador Sobel
+ * 
+ * @param image Matriz da imagem de entrada
+ * @param grad_mag Matriz de saída da magnitude do gradiente
+ * @param grad_dir Matriz de saída da direção do gradiente
+ */
 void sobel_edge_detection(uint8_t image[TILE][TILE], float grad_mag[TILE][TILE], float grad_dir[TILE][TILE]) {
    // gx e gy são os operadores padrão de sobel para fazer a varredura e detecção das bordas
    int8_t gx_kernel[3][3] = {
@@ -120,6 +160,13 @@ void sobel_edge_detection(uint8_t image[TILE][TILE], float grad_mag[TILE][TILE],
    }
 }
 
+/**
+ * @brief Realiza a supressão não máxima na imagem
+ * 
+ * @param grad_mag Matriz da magnitude do gradiente
+ * @param grad_dir Matriz da direção do gradiente
+ * @param output Matriz de saída da imagem
+ */
 void non_max_suppression(float grad_mag[TILE][TILE], float grad_dir[TILE][TILE], uint8_t output[TILE][TILE]) {
    for (int row = 0; row < TILE; row++) {
        for (int col = 0; col < TILE; col++) {
@@ -161,6 +208,15 @@ void non_max_suppression(float grad_mag[TILE][TILE], float grad_dir[TILE][TILE],
    }
 }
 
+/**
+ * @brief Aplica a limiarização na imagem
+ * 
+ * @param img Matriz da imagem de entrada
+ * @param low Limiar baixo
+ * @param high Limiar alto
+ * @param weak Valor para pixels fracos
+ * @param output Matriz de saída da imagem
+ */
 void threshold(uint8_t img[TILE][TILE], int low, int high, int weak, uint8_t output[TILE][TILE]) {
    int strong = 255;
    for(int i=0;i<TILE;i++) {
@@ -175,6 +231,14 @@ void threshold(uint8_t img[TILE][TILE], int low, int high, int weak, uint8_t out
    }
 }
 
+/**
+ * @brief Verifica se um pixel fraco possui um vizinho forte
+ * 
+ * @param img Matriz da imagem
+ * @param l Linha do pixel fraco
+ * @param c Coluna do pixel fraco
+ * @return (int) 1 se houver um vizinho forte, 0 caso contrário
+ */
 static int has_strong_neighbor(const uint8_t img[TILE][TILE], int l, int c) {
    int strong = 255;
    const int movs[] = {-1, 0, 1};
@@ -190,7 +254,12 @@ static int has_strong_neighbor(const uint8_t img[TILE][TILE], int l, int c) {
    return 0;
 }
 
-
+/**
+ * @brief Aplica a histerese na imagem
+ * 
+ * @param img Matriz da imagem de entrada
+ * @param weak Valor para pixels fracos
+ */
 void hysteresis(uint8_t img[TILE][TILE], int weak) {
    // faz cópias da imagem para varredura em direções diferentes
 	uint8_t top_bottom[TILE][TILE], bottom_up[TILE][TILE];
